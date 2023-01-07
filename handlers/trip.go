@@ -5,12 +5,16 @@ import (
 	tripdto "Backend/dto/trip"
 	"Backend/models"
 	"Backend/repositories"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"strconv"
 	"time"
 
+	"github.com/cloudinary/cloudinary-go/v2"
+	"github.com/cloudinary/cloudinary-go/v2/api/uploader"
 	"github.com/go-playground/validator"
 	"github.com/gorilla/mux"
 )
@@ -32,7 +36,8 @@ func (h *handleTrip) FindTrip(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode((err.Error()))
 	}
 	for i, p := range trip {
-		trip[i].Image = path_file + p.Image
+		Imagepath := os.Getenv("PATH_FILE") + p.Image
+		trip[i].Image = Imagepath
 	}
 	w.WriteHeader(http.StatusOK)
 	response := dto.SuccessResult{Code: http.StatusOK, Data: trip}
@@ -51,7 +56,7 @@ func (h *handleTrip) GetTrip(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(err.Error())
 		return
 	}
-	trip.Image = path_file + trip.Image
+	trip.Image = os.Getenv("PATH_FILE") + trip.Image
 	w.WriteHeader(http.StatusOK)
 	response := dto.SuccessResult{Code: http.StatusOK, Data: trip}
 	json.NewEncoder(w).Encode(response)
@@ -61,7 +66,7 @@ func (h *handleTrip) CreateTrip(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	dataContex := r.Context().Value("dataFile") // add this code
-	filename := dataContex.(string)             // add this code
+	filepath := dataContex.(string)             // add this code
 
 	country_id, _ := strconv.Atoi(r.FormValue("country_id"))
 	day, _ := strconv.Atoi(r.FormValue("day"))
@@ -81,7 +86,6 @@ func (h *handleTrip) CreateTrip(w http.ResponseWriter, r *http.Request) {
 		Price:        price,
 		Kuota:        kuota,
 		Description:  r.FormValue("description"),
-		Image:        filename,
 	}
 
 	validation := validator.New()
@@ -91,6 +95,19 @@ func (h *handleTrip) CreateTrip(w http.ResponseWriter, r *http.Request) {
 		response := dto.ErrorResult{Code: http.StatusBadRequest, Message: err.Error()}
 		json.NewEncoder(w).Encode(response)
 		return
+	}
+
+	var ctx = context.Background()
+	var CLOUD_NAME = os.Getenv("CLOUD_NAME")
+	var API_KEY = os.Getenv("API_KEY")
+	var API_SECRET = os.Getenv("API_SECRET")
+
+	cld, err := cloudinary.NewFromParams(CLOUD_NAME, API_KEY, API_SECRET)
+
+	resp, err := cld.Upload.Upload(ctx, filepath, uploader.UploadParams{Folder: "dewetour"})
+
+	if err != nil {
+		fmt.Println(err.Error())
 	}
 
 	trip := models.Trip{
@@ -105,7 +122,7 @@ func (h *handleTrip) CreateTrip(w http.ResponseWriter, r *http.Request) {
 		Price:        request.Price,
 		Kuota:        request.Kuota,
 		Description:  request.Description,
-		Image:        request.Image,
+		Image:        resp.SecureURL,
 	}
 
 	data, err := h.TripRepository.Createtrip(trip)
